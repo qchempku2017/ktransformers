@@ -588,6 +588,11 @@ else()
     message(STATUS "LTO: disabled")
 endif()
 
+# cpptrace headers. Remember to download cpptrace beforehand.
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/cpptrace/include
+)
+
 # If BLIS was detected earlier, apply its include directory and library to the
 # created Python extension target. We only do this after the module target
 # (${PROJECT_NAME}) has been created by pybind11_add_module().
