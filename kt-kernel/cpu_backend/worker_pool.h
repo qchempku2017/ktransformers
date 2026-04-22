@@ -24,29 +24,67 @@
 #include <vector>
 
 // #define PROFILE_BALANCE
+// # Fix no numa support environment, such as WSL2.
+inline bool kt_has_numa_support() {
+  static int cached = -2;
+  if (cached == -2) {
+    cached = numa_available();
+  }
+  return cached >= 0;
+}
 
 inline void set_to_numa(int this_numa) {
-  struct bitmask* mask = numa_bitmask_alloc(numa_num_configured_nodes());
+  if (!kt_has_numa_support()) {
+    return;
+  }
+
+  int nnodes = numa_num_configured_nodes();
+  if (nnodes <= 0) {
+    return;
+  }
+  if (this_numa < 0 || this_numa >= nnodes) {
+    return;
+  }
+
+  struct bitmask* mask = numa_bitmask_alloc(nnodes);
+  if (!mask) {
+    return;
+  }
+
   numa_bitmask_setbit(mask, this_numa);
   numa_bind(mask);
   numa_bitmask_free(mask);
 }
 
 inline void set_memory_to_numa(int this_numa) {
-  // printf("Set memory to NUMA %d\n", this_numa);
+  if (!kt_has_numa_support()) {
+    return;
+  }
+
+  int nnodes = numa_num_configured_nodes();
+  if (nnodes <= 0) {
+    return;
+  }
+  if (this_numa < 0 || this_numa >= nnodes) {
+    return;
+  }
+
   hwloc_topology_t topology;
   hwloc_topology_init(&topology);
   hwloc_topology_load(topology);
 
   hwloc_obj_t obj = hwloc_get_obj_by_type(topology, HWLOC_OBJ_NUMANODE, this_numa);
   if (!obj) {
-    fprintf(stderr, "NUMA node %d not found.\n", this_numa);
     hwloc_topology_destroy(topology);
     return;
   }
 
-  auto ret = hwloc_set_membind(topology, obj->nodeset, HWLOC_MEMBIND_BIND,
-                               HWLOC_MEMBIND_THREAD | HWLOC_MEMBIND_STRICT | HWLOC_MEMBIND_BYNODESET);
+  auto ret = hwloc_set_membind(
+      topology,
+      obj->nodeset,
+      HWLOC_MEMBIND_BIND,
+      HWLOC_MEMBIND_THREAD | HWLOC_MEMBIND_STRICT | HWLOC_MEMBIND_BYNODESET);
+
   if (ret != 0) {
     perror("hwloc_set_membind_nodeset");
   }

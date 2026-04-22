@@ -412,18 +412,30 @@ void NumaJobDistributor::worker_thread(int numa_id) {
 }
 
 void WorkerPool::init(WorkerPoolConfig config) {
-  printf("WorkerPool[0x%lx] %d subpools, [numa:threads]", (intptr_t)this, config.subpool_count);
-  for (int i = 0; i < config.subpool_count; i++) {
-    printf("[%d:%d] ", config.subpool_numa_map[i], config.subpool_thread_count[i]);
-  }
-  printf("\n");
+    // Fix no numa support.
+    bool has_numa = kt_has_numa_support();
+
+    printf("WorkerPool[0x%lx] %d subpools, [%s]",
+           (intptr_t)this,
+           config.subpool_count,
+           has_numa ? "numa:threads" : "threads");
+
+    for (int i = 0; i < config.subpool_count; ++i) {
+      if (has_numa) {
+        printf("[%d:%d] ", config.subpool_numa_map[i], config.subpool_thread_count[i]);
+      } else {
+        printf("[*:%d] ", config.subpool_thread_count[i]);
+      }
+    }
+    printf("\n");
 
   for (int i = 0; i < config.subpool_count; i++) {
     numa_worker_pools.push_back(nullptr);
   }
   std::vector<int> numa_threads_count(config.subpool_count, 0);
   for (int i = 0; i < config.subpool_count; i++) {
-    auto this_numa = config.subpool_numa_map[i];
+    // Fix no numa support, if no numa support, just use 0 as the numa id for all subpools.
+    auto this_numa = has_numa ? config.subpool_numa_map[i] : 0;
     auto this_thread_count = config.subpool_thread_count[i];
     auto this_thread_id_start = numa_threads_count[this_numa];
     std::thread([this, i, this_numa, this_thread_count, this_thread_id_start]() {
@@ -435,8 +447,15 @@ void WorkerPool::init(WorkerPoolConfig config) {
     numa_threads_count[this_numa] += this_thread_count;
   }
 
-  distributor = std::move(std::unique_ptr<NumaJobDistributor>(
-      new NumaJobDistributor(config.subpool_numa_map, config.subpool_thread_count)));
+    // Fix no numa support, if no numa support, just use 0 as the numa id for all subpools.
+    std::vector<int> distributor_numa_map = config.subpool_numa_map;
+    if (!has_numa) {
+      distributor_numa_map.assign(config.subpool_count, 0);
+    }
+
+    distributor = std::move(
+        std::unique_ptr<NumaJobDistributor>(
+            new NumaJobDistributor(distributor_numa_map, config.subpool_thread_count)));
   // distributor = std::move(std::unique_ptr<NumaJobDistributor>(new NumaJobDistributor(config.subpool_numa_map)));
 }
 
@@ -447,7 +466,7 @@ WorkerPool::WorkerPool(int total_threads) {
   config.subpool_numa_map.resize(config.subpool_count);
   config.subpool_thread_count.resize(config.subpool_count);
   for (int i = 0; i < config.subpool_count; i++) {
-    config.subpool_numa_map[i] = i;
+    config.subpool_numa_map[i] = kt_has_numa_support() ? i : 0;
     config.subpool_thread_count[i] = total_threads / config.subpool_count;
   }
   init(config);
@@ -459,7 +478,7 @@ WorkerPool::WorkerPool(int total_threads, int single_numa_id) {
   config.subpool_numa_map.resize(config.subpool_count);
   config.subpool_thread_count.resize(config.subpool_count);
   for (int i = 0; i < config.subpool_count; i++) {
-    config.subpool_numa_map[i] = single_numa_id;
+    config.subpool_numa_map[i] = kt_has_numa_support() ? single_numa_id : 0;
     config.subpool_thread_count[i] = total_threads / config.subpool_count;
   }
   init(config);
