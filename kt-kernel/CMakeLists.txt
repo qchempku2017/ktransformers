@@ -399,6 +399,8 @@ add_compile_options("$<$<COMPILE_LANGUAGE:C>:${ARCH_FLAGS}>")
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../third_party/pybind11 ${CMAKE_CURRENT_BINARY_DIR}/third_party/pybind11)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../third_party/llama.cpp ${CMAKE_CURRENT_BINARY_DIR}/third_party/llama.cpp)
+# Add cpptrace as a subdirectory to ensure its headers are available.
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../third_party/cpptrace ${CMAKE_CURRENT_BINARY_DIR}/third_party/cpptrace)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../third_party)
 if(KTRANSFORMERS_USE_CUDA)
@@ -632,7 +634,13 @@ if(NOT HOST_IS_X86 AND KTRANSFORMERS_CPU_USE_KML)
     endif()
     target_compile_definitions(${PROJECT_NAME} PRIVATE CPU_USE_KML)
 endif()
-target_link_libraries(${PROJECT_NAME} PRIVATE llama PkgConfig::HWLOC OpenMP::OpenMP_CXX)
+# Correctly link cpptrace.
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    llama
+    cpptrace::cpptrace
+    PkgConfig::HWLOC
+    OpenMP::OpenMP_CXX
+)
 if(NOT HOST_IS_X86 AND KTRANSFORMERS_CPU_USE_KML)
     if(KTRANSFORMERS_CPU_DEBUG)
         # add_executable(convert-test ${CMAKE_CURRENT_SOURCE_DIR}/operators/kml/convert-test.cpp)
